@@ -1,0 +1,41 @@
+Hello world packaged in a Node.js app.
+Targeted to deploy on ICP
+
+Params:
+master=mycluster.icp
+icp_usr=admin
+icp_pwd=(admin)
+
+cat <<DOCKER
+-----------------> BUILD & SHIP <---------------------
+ Note: Certificate setup a priori
+DOCKER
+
+docker build -t $master:8500/default/hello-world .
+docker login $master:8500/ -u $icp_usr -p $icp_pwd
+docker push  $master:8500/default/hello-world
+
+cat <<KUBECTL
+-----------------> SETUP KUBECTL <---------------------
+KUBECTL
+
+curl -Ls https://raw.githubusercontent.com/shomrai/script/master/icp21_kubectl-setup|bash
+
+kubectl get image hello-world -o yaml|sed 's/scope: namespace/scope: global/g'|kubectl replace -f -
+
+kubectl delete services   hello-world-service
+kubectl delete deployment hello-world-deployment
+
+kubectl run hello-world-deployment --image=$master:8500/default/hello-world
+
+kubectl expose deployment/hello-world-deployment --type=NodePort --port=8080 --name=hello-world-service --target-port=8080
+
+NodePort=`kubectl describe service hello-world-service|awk '/NodePort:/ {print $3};'|cut -f1 -d/`
+
+cat <<CURL
+=================================================================
+  URL=> 10.85.3.102:$NodePort
+==================================================================
+CURL
+sleep 10
+curl 10.85.3.102:$NodePort
